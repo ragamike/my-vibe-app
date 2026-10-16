@@ -1,12 +1,116 @@
+"use client";
+
+import { useState, useMemo } from "react";
+import { Assignment, Environment, MediumTrack, AssignmentScale, AssignmentStatus } from "@/lib/types";
+import { CURRICULUM_UNITS, INITIAL_ASSIGNMENTS, DEFAULT_GEAR_PROFILE } from "@/lib/curriculum";
+
 export default function Home() {
+  const [currentMedium, setCurrentMedium] = useState<MediumTrack>("photography");
+  const [currentEnv, setCurrentEnv] = useState<Environment>("home");
+  const [activeUnitNumber, setActiveUnitNumber] = useState<number>(1);
+  const [selectedScale, setSelectedScale] = useState<AssignmentScale | "all">("all");
+  const [assignments, setAssignments] = useState<Assignment[]>(INITIAL_ASSIGNMENTS);
+  const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
+  const [showGearSheet, setShowGearSheet] = useState<boolean>(false);
+
+  // Active unit metadata
+  const activeUnit = useMemo(() => {
+    return CURRICULUM_UNITS.find((u) => u.unitNumber === activeUnitNumber) || CURRICULUM_UNITS[0];
+  }, [activeUnitNumber]);
+
+  // Filtered assignments based on medium, environment, unit, and scale
+  const contextAssignments = useMemo(() => {
+    return assignments.filter((a) => {
+      const matchMedium = a.medium === currentMedium;
+      const matchEnv = a.environment === currentEnv;
+      const matchUnit = a.unitNumber === activeUnitNumber;
+      const matchScale = selectedScale === "all" ? true : a.scale === selectedScale;
+      return matchMedium && matchEnv && matchUnit && matchScale;
+    });
+  }, [assignments, currentMedium, currentEnv, activeUnitNumber, selectedScale]);
+
+  // Overall stats for active context
+  const stats = useMemo(() => {
+    const totalInContext = contextAssignments.length;
+    const completed = contextAssignments.filter((a) => a.status === "completed").length;
+    const inProgress = contextAssignments.filter((a) => a.status === "in-progress").length;
+    return { totalInContext, completed, inProgress };
+  }, [contextAssignments]);
+
+  const toggleAssignmentStatus = (id: string) => {
+    setAssignments((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const nextStatus: Record<AssignmentStatus, AssignmentStatus> = {
+          available: "in-progress",
+          "in-progress": "completed",
+          completed: "available",
+          locked: "locked",
+        };
+        const updatedStatus = nextStatus[item.status];
+        if (selectedAssignment?.id === id) {
+          setSelectedAssignment({ ...item, status: updatedStatus });
+        }
+        return { ...item, status: updatedStatus };
+      })
+    );
+  };
+
+  const getStatusBadge = (status: AssignmentStatus) => {
+    switch (status) {
+      case "completed":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            Completed
+          </span>
+        );
+      case "in-progress":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+            In Progress
+          </span>
+        );
+      case "locked":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700">
+            Locked
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-500/15 text-sky-400 border border-sky-500/30">
+            <span className="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+            Ready
+          </span>
+        );
+    }
+  };
+
+  const getScaleBadge = (scale: AssignmentScale) => {
+    if (scale === "milestone") {
+      return (
+        <span className="px-2 py-0.5 text-[10px] uppercase font-bold tracking-wider rounded bg-purple-500/15 text-purple-300 border border-purple-500/30">
+          ★ Milestone
+        </span>
+      );
+    }
+    return (
+      <span className="px-2 py-0.5 text-[10px] uppercase font-bold tracking-wider rounded bg-zinc-800 text-zinc-300 border border-zinc-750">
+        ⚡ Micro
+      </span>
+    );
+  };
+
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 selection:bg-amber-500 selection:text-zinc-950 flex flex-col">
-      {/* Top Navigation Bar */}
-      <header className="border-b border-zinc-800/80 bg-zinc-950/70 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-amber-500 selection:text-zinc-950">
+      {/* Top Header */}
+      <header className="border-b border-zinc-850 bg-zinc-950/85 backdrop-blur-md sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          {/* Logo & Subtitle */}
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/10 border border-amber-500/30 text-amber-400">
-              {/* Camera Aperture / Lens Icon */}
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
@@ -27,235 +131,580 @@ export default function Home() {
               </svg>
             </div>
             <div>
-              <span className="text-sm font-semibold tracking-wider uppercase text-zinc-200">
-                Strags Studio
-              </span>
-              <span className="block text-xs text-zinc-500 font-mono">
-                Creative Command Center
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold tracking-wider uppercase text-zinc-100">
+                  Strags Studio
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">
+                  Challenge Engine
+                </span>
+              </div>
+              <span className="block text-xs text-zinc-400 font-mono">
+                Context-Aware Progressive Training Hub
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              Workspace Active
-            </span>
+          {/* Controls: Medium Track + Environment + Gear Profile */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Medium Track Switcher (Photo vs Video) */}
+            <div className="p-1 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center shadow-inner">
+              <button
+                type="button"
+                onClick={() => setCurrentMedium("photography")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  currentMedium === "photography"
+                    ? "bg-gradient-to-r from-amber-500 to-orange-500 text-zinc-950 font-bold shadow-md shadow-amber-950/40"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <span>📸</span>
+                <span>Photography</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentMedium("videography")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  currentMedium === "videography"
+                    ? "bg-gradient-to-r from-cyan-500 to-blue-500 text-zinc-950 font-bold shadow-md shadow-cyan-950/40"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <span>🎬</span>
+                <span>Videography</span>
+              </button>
+            </div>
+
+            {/* Context Toggle (Road vs Home) */}
+            <div className="p-1 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center shadow-inner">
+              <button
+                type="button"
+                onClick={() => setCurrentEnv("road")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  currentEnv === "road"
+                    ? "bg-gradient-to-r from-sky-600 to-indigo-600 text-white shadow-md shadow-sky-950/50"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <span>✈️</span>
+                <span>On the Road</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentEnv("home")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  currentEnv === "home"
+                    ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/50"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                <span>🏠</span>
+                <span>At Home</span>
+              </button>
+            </div>
+
+            {/* Gear Profile Trigger */}
+            <button
+              onClick={() => setShowGearSheet(true)}
+              className="px-3 py-1.5 rounded-xl border border-zinc-800 bg-zinc-900/80 hover:bg-zinc-850 hover:border-zinc-700 text-xs text-zinc-300 flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <span>🎒</span>
+              <span>Gear Kit</span>
+            </button>
           </div>
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-12 md:py-16 flex flex-col gap-12">
-        {/* Hero Welcome Section */}
-        <div className="relative overflow-hidden rounded-3xl border border-zinc-800/90 bg-gradient-to-b from-zinc-900/90 via-zinc-900/40 to-zinc-950 p-8 md:p-14">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(245,158,11,0.12),rgba(255,255,255,0))] pointer-events-none" />
+      {/* Main Container */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8 flex flex-col gap-8">
+        {/* Active Context Banner */}
+        <section className="relative overflow-hidden rounded-3xl border border-zinc-800/90 bg-gradient-to-b from-zinc-900/90 via-zinc-900/40 to-zinc-950 p-6 sm:p-8">
+          <div
+            className={`absolute top-0 right-0 w-96 h-96 blur-3xl opacity-15 pointer-events-none rounded-full ${
+              currentMedium === "photography"
+                ? currentEnv === "road"
+                  ? "bg-sky-500"
+                  : "bg-amber-500"
+                : currentEnv === "road"
+                ? "bg-blue-500"
+                : "bg-cyan-500"
+            }`}
+          />
 
-          <div className="relative z-10 max-w-3xl flex flex-col gap-5">
-            <div className="inline-flex items-center gap-2 self-start px-3 py-1 rounded-full bg-zinc-800/80 border border-zinc-700/60 text-xs font-medium text-zinc-300">
-              <span className="text-amber-400">●</span> Production & Portfolio HQ
-            </div>
-
-            <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold tracking-tight text-white leading-tight">
-              Strags Photography and Videography Hub
-            </h1>
-
-            <p className="text-base md:text-xl text-zinc-400 leading-relaxed max-w-2xl">
-              Welcome to your creative headquarters. Track work in progress,
-              curate and showcase finished work, take on new creative challenges,
-              and cultivate bold visual ideas.
-            </p>
-
-            {/* Quick Action Badges */}
-            <div className="pt-2 flex flex-wrap gap-3 text-xs md:text-sm text-zinc-400">
-              <span className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-zinc-850/80 border border-zinc-800 text-zinc-300">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="w-4 h-4 text-amber-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth="2"
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="flex flex-col gap-2.5">
+              {/* Context Pill Badges */}
+              <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+                <span
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-semibold border ${
+                    currentMedium === "photography"
+                      ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                      : "bg-cyan-500/15 text-cyan-400 border-cyan-500/30"
+                  }`}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                Work in Progress
-              </span>
-              <span className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-zinc-850/80 border border-zinc-800 text-zinc-300">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="w-4 h-4 text-amber-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                  />
-                </svg>
-                Showcase & Vault
-              </span>
-              <span className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-zinc-850/80 border border-zinc-800 text-zinc-300">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="w-4 h-4 text-amber-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                  />
-                </svg>
-                Challenges & Ideation
-              </span>
-            </div>
-          </div>
-        </div>
+                  <span>{currentMedium === "photography" ? "📸" : "🎬"}</span>
+                  <span className="capitalize">{currentMedium} Track</span>
+                </span>
 
-        {/* Core Hub Pillars */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Card 1: Work in Progress */}
-          <div className="group relative rounded-2xl border border-zinc-800/80 bg-zinc-900/50 p-6 md:p-8 hover:border-zinc-700/90 hover:bg-zinc-900/80 transition-all duration-200 flex flex-col justify-between">
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 group-hover:scale-105 transition-transform">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="w-6 h-6"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                    />
-                  </svg>
-                </div>
-                <span className="text-xs font-mono text-zinc-500 uppercase tracking-widest">
-                  Active
+                <span
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-semibold border ${
+                    currentEnv === "road"
+                      ? "bg-sky-500/15 text-sky-400 border-sky-500/30"
+                      : "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                  }`}
+                >
+                  <span>{currentEnv === "road" ? "✈️" : "🏠"}</span>
+                  <span>
+                    {currentEnv === "road"
+                      ? "On the Road (Mobile / Laptop / Writing)"
+                      : "At Home (Full Studio / Rigging / Gear)"}
+                  </span>
                 </span>
               </div>
-              <h2 className="text-xl font-semibold text-white group-hover:text-amber-400 transition-colors">
-                Work in Progress
-              </h2>
-              <p className="text-sm text-zinc-400 leading-relaxed">
-                Log and monitor live production pipelines, shoot schedules, rough
-                cuts, color grading passes, and pending client reviews.
+
+              {/* Title & Description */}
+              <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+                Unit {activeUnit.unitNumber}: {activeUnit.title}
+              </h1>
+              <p className="text-sm sm:text-base text-zinc-400 max-w-2xl leading-relaxed">
+                {activeUnit.tagline} &mdash; {activeUnit.description}
               </p>
             </div>
-            <div className="mt-6 pt-4 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-500">
-              <span>Pipeline Tracker</span>
-              <span className="text-zinc-400 group-hover:translate-x-0.5 transition-transform">
-                Coming soon &rarr;
-              </span>
+
+            {/* Context Match Card */}
+            <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-4 flex flex-col gap-2 min-w-[240px]">
+              <div className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
+                Track Progression
+              </div>
+              <div className="text-2xl font-bold text-white flex items-baseline gap-2">
+                <span>{contextAssignments.length}</span>
+                <span className="text-xs font-normal text-zinc-400">
+                  {currentMedium} exercises calibrated for this context
+                </span>
+              </div>
+              <div className="flex items-center gap-2 pt-1 border-t border-zinc-800 text-xs text-zinc-400">
+                <span className="text-emerald-400 font-semibold">{stats.completed}</span> completed
+                <span>•</span>
+                <span className="text-amber-400 font-semibold">{stats.inProgress}</span> active
+              </div>
             </div>
           </div>
 
-          {/* Card 2: Showcase & Storage */}
-          <div className="group relative rounded-2xl border border-zinc-800/80 bg-zinc-900/50 p-6 md:p-8 hover:border-zinc-700/90 hover:bg-zinc-900/80 transition-all duration-200 flex flex-col justify-between">
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-400 group-hover:scale-105 transition-transform">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="w-6 h-6"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
+          {/* Unit Tabs & Scale Controls */}
+          <div className="mt-6 pt-6 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono text-zinc-500 uppercase mr-1">Curriculum:</span>
+              {CURRICULUM_UNITS.map((unit) => {
+                const isActive = unit.unitNumber === activeUnitNumber;
+                return (
+                  <button
+                    key={unit.unitNumber}
+                    onClick={() => setActiveUnitNumber(unit.unitNumber)}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                      isActive
+                        ? "bg-zinc-100 text-zinc-900 font-semibold shadow"
+                        : "bg-zinc-850/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 border border-zinc-800"
+                    }`}
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-                    />
-                  </svg>
-                </div>
-                <span className="text-xs font-mono text-zinc-500 uppercase tracking-widest">
-                  Archive
-                </span>
-              </div>
-              <h2 className="text-xl font-semibold text-white group-hover:text-orange-400 transition-colors">
-                Showcase & Storage
-              </h2>
-              <p className="text-sm text-zinc-400 leading-relaxed">
-                Organize, store, and display your finished photographic series,
-                cinematic highlight reels, client deliverables, and portfolio
-                favorites.
-              </p>
+                    Unit {unit.unitNumber}: {unit.title}
+                  </button>
+                );
+              })}
             </div>
-            <div className="mt-6 pt-4 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-500">
-              <span>Media Vault</span>
-              <span className="text-zinc-400 group-hover:translate-x-0.5 transition-transform">
-                Coming soon &rarr;
-              </span>
-            </div>
-          </div>
 
-          {/* Card 3: Ideas & Challenges */}
-          <div className="group relative rounded-2xl border border-zinc-800/80 bg-zinc-900/50 p-6 md:p-8 hover:border-zinc-700/90 hover:bg-zinc-900/80 transition-all duration-200 flex flex-col justify-between">
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 group-hover:scale-105 transition-transform">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="w-6 h-6"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                    />
-                  </svg>
-                </div>
-                <span className="text-xs font-mono text-zinc-500 uppercase tracking-widest">
-                  Inspiration
-                </span>
-              </div>
-              <h2 className="text-xl font-semibold text-white group-hover:text-yellow-400 transition-colors">
-                Ideas & Challenges
-              </h2>
-              <p className="text-sm text-zinc-400 leading-relaxed">
-                Break creative plateaus with prompts, lighting exercises,
-                framing experiments, and structured photo/video challenges.
-              </p>
-            </div>
-            <div className="mt-6 pt-4 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-500">
-              <span>Creative Prompts</span>
-              <span className="text-zinc-400 group-hover:translate-x-0.5 transition-transform">
-                Coming soon &rarr;
-              </span>
+            {/* Filter by Scale (Micro vs Milestone) */}
+            <div className="flex items-center gap-1.5 text-xs bg-zinc-900/90 border border-zinc-800 p-1 rounded-xl">
+              <button
+                onClick={() => setSelectedScale("all")}
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                  selectedScale === "all"
+                    ? "bg-zinc-700 text-white font-medium"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                All Scales
+              </button>
+              <button
+                onClick={() => setSelectedScale("micro")}
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                  selectedScale === "micro"
+                    ? "bg-zinc-700 text-white font-medium"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                ⚡ Micro Only
+              </button>
+              <button
+                onClick={() => setSelectedScale("milestone")}
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                  selectedScale === "milestone"
+                    ? "bg-zinc-700 text-white font-medium"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                ★ Milestones
+              </button>
             </div>
           </div>
         </section>
+
+        {/* Section Heading */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <span className="capitalize">{currentMedium}</span> Challenges Matching Context
+              <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-750 font-mono">
+                {contextAssignments.length}
+              </span>
+            </h2>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Curated for{" "}
+              <span className="font-semibold text-zinc-300">
+                {currentEnv === "road" ? "✈️ On the Road" : "🏠 At Home Studio"}
+              </span>{" "}
+              in{" "}
+              <span className="font-semibold text-zinc-300">
+                Unit {activeUnit.unitNumber} ({activeUnit.title})
+              </span>
+              .
+            </p>
+          </div>
+
+          <div className="hidden sm:flex items-center gap-2 text-xs text-zinc-500 font-mono">
+            <span>Select a card to open detailed rubric</span>
+          </div>
+        </div>
+
+        {/* Challenge Cards Grid */}
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {contextAssignments.map((assignment) => {
+            const isSelected = selectedAssignment?.id === assignment.id;
+            return (
+              <div
+                key={assignment.id}
+                onClick={() => setSelectedAssignment(assignment)}
+                className={`group relative rounded-2xl border transition-all duration-200 p-5 flex flex-col justify-between cursor-pointer ${
+                  isSelected
+                    ? currentMedium === "photography"
+                      ? "border-amber-500/80 bg-zinc-900/90 shadow-lg shadow-amber-950/20"
+                      : "border-cyan-500/80 bg-zinc-900/90 shadow-lg shadow-cyan-950/20"
+                    : "border-zinc-800/80 bg-zinc-900/40 hover:border-zinc-700 hover:bg-zinc-900/70"
+                }`}
+              >
+                {/* Header row */}
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      {getScaleBadge(assignment.scale)}
+                      <span className="text-xs font-mono text-zinc-400">
+                        Tier {assignment.difficultyTier}
+                      </span>
+                    </div>
+                    {getStatusBadge(assignment.status)}
+                  </div>
+
+                  {/* Title */}
+                  <h3
+                    className={`text-base font-semibold text-white leading-snug transition-colors ${
+                      currentMedium === "photography"
+                        ? "group-hover:text-amber-400"
+                        : "group-hover:text-cyan-400"
+                    }`}
+                  >
+                    {assignment.title}
+                  </h3>
+
+                  {/* Domain & Duration */}
+                  <div className="flex items-center gap-3 text-xs text-zinc-400">
+                    <span className="flex items-center gap-1">
+                      <span className="text-zinc-500">Domain:</span>
+                      <span className="text-zinc-300 font-medium">{assignment.domain}</span>
+                    </span>
+                    {assignment.estimatedMinutes && (
+                      <span className="flex items-center gap-1 font-mono text-zinc-400">
+                        <span>⏱</span>
+                        <span>{assignment.estimatedMinutes}m</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Required Gear Pills */}
+                  <div className="pt-2 flex flex-wrap gap-1.5">
+                    {assignment.requiredGear.map((gear, idx) => (
+                      <span
+                        key={idx}
+                        className="text-[11px] px-2 py-0.5 rounded-md bg-zinc-800/80 border border-zinc-750 text-zinc-300 line-clamp-1"
+                      >
+                        {gear}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Bottom Action Footer */}
+                <div className="mt-5 pt-3 border-t border-zinc-850 flex items-center justify-between">
+                  <span className="text-xs text-zinc-500 font-mono">
+                    {assignment.prerequisites.length > 0
+                      ? `${assignment.prerequisites.length} prerequisite(s)`
+                      : "Direct entry"}
+                  </span>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleAssignmentStatus(assignment.id);
+                    }}
+                    className={`text-xs px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
+                      assignment.status === "completed"
+                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+                        : assignment.status === "in-progress"
+                        ? "border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
+                        : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+                    }`}
+                  >
+                    {assignment.status === "completed"
+                      ? "✓ Completed"
+                      : assignment.status === "in-progress"
+                      ? "In Progress"
+                      : "Start"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </section>
+
+        {contextAssignments.length === 0 && (
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-12 text-center flex flex-col items-center gap-3">
+            <span className="text-3xl">🎯</span>
+            <h3 className="text-base font-semibold text-zinc-200">
+              No matching {currentMedium} challenges found
+            </h3>
+            <p className="text-xs text-zinc-400 max-w-sm">
+              Try switching your scale filter to &ldquo;All Scales&rdquo; or change the environment to view
+              other exercises in Unit {activeUnit.unitNumber}.
+            </p>
+          </div>
+        )}
+
+        {/* Selected Challenge Detail Modal / Drawer */}
+        {selectedAssignment && (
+          <div
+            className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6"
+            onClick={() => setSelectedAssignment(null)}
+          >
+            <div
+              className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-2xl w-full p-6 sm:p-8 flex flex-col gap-6 shadow-2xl overflow-y-auto max-h-[90vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    {getScaleBadge(selectedAssignment.scale)}
+                    <span className="text-xs font-mono text-zinc-400">
+                      Unit {selectedAssignment.unitNumber} &bull; Tier{" "}
+                      {selectedAssignment.difficultyTier}
+                    </span>
+                    <span className="text-xs px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono capitalize">
+                      {selectedAssignment.medium === "photography" ? "📸 Photo" : "🎬 Video"} &bull;{" "}
+                      {selectedAssignment.environment === "road" ? "✈️ Road" : "🏠 Home"}
+                    </span>
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-bold text-white leading-tight">
+                    {selectedAssignment.title}
+                  </h2>
+                </div>
+                <button
+                  onClick={() => setSelectedAssignment(null)}
+                  className="w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Status and Action bar */}
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-zinc-950 border border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-zinc-400">Status:</span>
+                  {getStatusBadge(selectedAssignment.status)}
+                </div>
+                <button
+                  onClick={() => toggleAssignmentStatus(selectedAssignment.id)}
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-zinc-950 transition-colors cursor-pointer"
+                >
+                  Cycle Status (Ready &rarr; In Progress &rarr; Done)
+                </button>
+              </div>
+
+              {/* Required Gear */}
+              <div className="flex flex-col gap-2">
+                <h4 className="text-xs font-mono text-zinc-400 uppercase tracking-wider">
+                  Required Kit & Environment:
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {selectedAssignment.requiredGear.map((g, i) => (
+                    <span
+                      key={i}
+                      className="text-xs px-3 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200"
+                    >
+                      {g}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Prompt Markdown Content */}
+              <div className="flex flex-col gap-2">
+                <h4 className="text-xs font-mono text-zinc-400 uppercase tracking-wider">
+                  Assignment Protocol & Execution:
+                </h4>
+                <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800/90 text-sm text-zinc-300 leading-relaxed font-sans whitespace-pre-line">
+                  {selectedAssignment.promptMarkdown}
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end">
+                <button
+                  onClick={() => setSelectedAssignment(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-zinc-800 hover:bg-zinc-750 text-white transition-colors cursor-pointer"
+                >
+                  Close Rubric
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Gear Profile Modal */}
+        {showGearSheet && (
+          <div
+            className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6"
+            onClick={() => setShowGearSheet(false)}
+          >
+            <div
+              className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-2xl w-full p-6 sm:p-8 flex flex-col gap-6 shadow-2xl overflow-y-auto max-h-[90vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-bold text-white">
+                    🎒 {DEFAULT_GEAR_PROFILE.name}
+                  </h2>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    Environment-aware gear configurations synced with current assignments.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowGearSheet(false)}
+                  className="w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Road Kit */}
+                <div
+                  className={`p-4 rounded-2xl border ${
+                    currentEnv === "road"
+                      ? "border-sky-500/50 bg-sky-950/20"
+                      : "border-zinc-800 bg-zinc-950/60"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                      <span>✈️ Road Kit</span>
+                    </h3>
+                    {currentEnv === "road" && (
+                      <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-sky-500/20 text-sky-400">
+                        Current
+                      </span>
+                    )}
+                  </div>
+                  <ul className="text-xs text-zinc-300 space-y-1.5">
+                    {DEFAULT_GEAR_PROFILE.portableKit.map((item, idx) => (
+                      <li key={idx} className="flex items-center gap-2">
+                        <span className="text-sky-400">•</span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Studio Kit */}
+                <div
+                  className={`p-4 rounded-2xl border ${
+                    currentEnv === "home"
+                      ? "border-emerald-500/50 bg-emerald-950/20"
+                      : "border-zinc-800 bg-zinc-950/60"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                      <span>🏠 Studio Kit</span>
+                    </h3>
+                    {currentEnv === "home" && (
+                      <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400">
+                        Current
+                      </span>
+                    )}
+                  </div>
+                  <ul className="text-xs text-zinc-300 space-y-1.5">
+                    {DEFAULT_GEAR_PROFILE.studioKit.map((item, idx) => (
+                      <li key={idx} className="flex items-center gap-2">
+                        <span className="text-emerald-400">•</span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {/* Cameras & Glass Overview */}
+              <div className="p-4 rounded-2xl bg-zinc-950/80 border border-zinc-800 flex flex-col gap-3">
+                <h4 className="text-xs font-mono text-zinc-400 uppercase tracking-wider">
+                  Master Sensor & Glass Roster
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-zinc-500 block mb-1">Cameras:</span>
+                    <div className="text-zinc-200 font-medium">
+                      {DEFAULT_GEAR_PROFILE.cameras.join(", ")}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500 block mb-1">Lenses:</span>
+                    <div className="text-zinc-200 font-medium">
+                      {DEFAULT_GEAR_PROFILE.lenses.join(", ")}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setShowGearSheet(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-zinc-800 hover:bg-zinc-750 text-white transition-colors cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-zinc-800/80 py-8 mt-auto">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-500">
-          <p>Strags Photography and Videography Hub &copy; 2026</p>
-          <p className="flex items-center gap-2">
-            <span>Visual Storytelling</span>
-            <span>•</span>
-            <span>Production Workflow</span>
+      <footer className="border-t border-zinc-850 py-6 mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-400">
+          <p>Strags Photography & Videography Hub &copy; 2026</p>
+          <p className="flex items-center gap-2 font-mono">
+            <span className="capitalize">{currentMedium} Track Active</span>
+            <span>&bull;</span>
+            <span className="text-zinc-300">
+              {currentEnv === "road" ? "✈️ Road Context" : "🏠 Home Studio Context"}
+            </span>
           </p>
         </div>
       </footer>
