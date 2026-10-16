@@ -1,18 +1,21 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Assignment,
   Environment,
   MediumTrack,
   AssignmentScale,
   AssignmentStatus,
+  AssignmentPlanningData,
+  AssignmentReflectionData,
 } from "@/lib/types";
 import {
   CURRICULUM_UNITS,
   INITIAL_ASSIGNMENTS,
   DEFAULT_GEAR_PROFILE,
 } from "@/lib/curriculum";
+import AssignmentModal from "@/components/AssignmentModal";
 
 export default function Home() {
   const [currentMedium, setCurrentMedium] = useState<MediumTrack>("photography");
@@ -22,6 +25,29 @@ export default function Home() {
   const [assignments, setAssignments] = useState<Assignment[]>(INITIAL_ASSIGNMENTS);
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   const [showGearSheet, setShowGearSheet] = useState<boolean>(false);
+
+  // Sync with localStorage on client mount to restore saved drafts and completions
+  useEffect(() => {
+    try {
+      setAssignments((prev) =>
+        prev.map((item) => {
+          const stored = localStorage.getItem(`assignment_data_${item.id}`);
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            return {
+              ...item,
+              status: parsed.status || item.status,
+              planning: parsed.planning || item.planning,
+              reflection: parsed.reflection || item.reflection,
+            };
+          }
+          return item;
+        })
+      );
+    } catch (e) {
+      console.warn("Could not load stored assignment progress:", e);
+    }
+  }, []);
 
   // Active unit metadata
   const activeUnit = useMemo(() => {
@@ -66,12 +92,58 @@ export default function Home() {
           locked: "locked",
         };
         const updatedStatus = nextStatus[item.status];
-        if (selectedAssignment?.id === id) {
-          setSelectedAssignment({ ...item, status: updatedStatus });
+        try {
+          const existing = localStorage.getItem(`assignment_data_${id}`);
+          const parsed = existing ? JSON.parse(existing) : {};
+          localStorage.setItem(
+            `assignment_data_${id}`,
+            JSON.stringify({ ...parsed, status: updatedStatus })
+          );
+        } catch {
+          // localStorage fallback
         }
         return { ...item, status: updatedStatus };
       })
     );
+  };
+
+  const handleSaveDraft = (
+    assignmentId: string,
+    planning: AssignmentPlanningData,
+    reflection: AssignmentReflectionData,
+    status: AssignmentStatus
+  ) => {
+    setAssignments((prev) =>
+      prev.map((item) => {
+        if (item.id !== assignmentId) return item;
+        return {
+          ...item,
+          status,
+          planning,
+          reflection,
+        };
+      })
+    );
+    setSelectedAssignment(null);
+  };
+
+  const handleMarkCompleted = (
+    assignmentId: string,
+    planning: AssignmentPlanningData,
+    reflection: AssignmentReflectionData
+  ) => {
+    setAssignments((prev) =>
+      prev.map((item) => {
+        if (item.id !== assignmentId) return item;
+        return {
+          ...item,
+          status: "completed",
+          planning,
+          reflection,
+        };
+      })
+    );
+    setSelectedAssignment(null);
   };
 
   const getStatusBadge = (status: AssignmentStatus) => {
@@ -389,7 +461,7 @@ export default function Home() {
           </div>
 
           <div className="hidden sm:flex items-center gap-2 text-xs text-zinc-500 font-mono">
-            <span>Select a card to inspect rubric</span>
+            <span>Click any card to open Planning, Pre-Vis & Reflection</span>
           </div>
         </div>
 
@@ -505,94 +577,14 @@ export default function Home() {
           </div>
         )}
 
-        {/* Selected Challenge Detail Modal / Drawer */}
-        {selectedAssignment && (
-          <div
-            className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6"
-            onClick={() => setSelectedAssignment(null)}
-          >
-            <div
-              className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-2xl w-full p-6 sm:p-8 flex flex-col gap-6 shadow-2xl overflow-y-auto max-h-[90vh]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Modal Header */}
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    {getScaleBadge(selectedAssignment.scale)}
-                    <span className="text-xs font-mono text-zinc-400">
-                      Unit {selectedAssignment.unitNumber} &bull; Tier{" "}
-                      {selectedAssignment.difficultyTier}
-                    </span>
-                    <span className="text-xs px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono capitalize">
-                      {selectedAssignment.medium === "photography" ? "📸 Photo" : "🎬 Video"} &bull;{" "}
-                      {selectedAssignment.environment === "road" ? "✈️ Road" : "🏠 Home"}
-                    </span>
-                  </div>
-                  <h2 className="text-xl sm:text-2xl font-bold text-white leading-tight">
-                    {selectedAssignment.title}
-                  </h2>
-                </div>
-                <button
-                  onClick={() => setSelectedAssignment(null)}
-                  className="w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* Status and Action bar */}
-              <div className="flex items-center justify-between p-3.5 rounded-xl bg-zinc-950 border border-zinc-800">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-zinc-400">Status:</span>
-                  {getStatusBadge(selectedAssignment.status)}
-                </div>
-                <button
-                  onClick={() => toggleAssignmentStatus(selectedAssignment.id)}
-                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-zinc-950 transition-colors cursor-pointer"
-                >
-                  Cycle Status (Ready &rarr; In Progress &rarr; Done)
-                </button>
-              </div>
-
-              {/* Required Gear */}
-              <div className="flex flex-col gap-2">
-                <h4 className="text-xs font-mono text-zinc-400 uppercase tracking-wider">
-                  Required Kit & Environment:
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  {selectedAssignment.requiredGear.map((g, i) => (
-                    <span
-                      key={i}
-                      className="text-xs px-3 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200"
-                    >
-                      {g}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Prompt Markdown Content */}
-              <div className="flex flex-col gap-2">
-                <h4 className="text-xs font-mono text-zinc-400 uppercase tracking-wider">
-                  Assignment Protocol & Execution:
-                </h4>
-                <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800/90 text-sm text-zinc-300 leading-relaxed font-sans whitespace-pre-line">
-                  {selectedAssignment.promptMarkdown}
-                </div>
-              </div>
-
-              <div className="pt-2 flex items-center justify-end">
-                <button
-                  onClick={() => setSelectedAssignment(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-zinc-800 hover:bg-zinc-750 text-white transition-colors cursor-pointer"
-                >
-                  Close Rubric
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Assignment Planning, Pre-Vis, and Reflection Modal */}
+        <AssignmentModal
+          assignment={selectedAssignment}
+          isOpen={selectedAssignment !== null}
+          onClose={() => setSelectedAssignment(null)}
+          onSaveDraft={handleSaveDraft}
+          onMarkCompleted={handleMarkCompleted}
+        />
 
         {/* Gear Arsenal Modal */}
         {showGearSheet && (

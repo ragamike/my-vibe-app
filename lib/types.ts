@@ -8,6 +8,50 @@ export type AssignmentStatus = 'locked' | 'available' | 'in-progress' | 'complet
 
 export type DifficultyTier = 1 | 2 | 3 | 'beginner' | 'intermediate' | 'advanced';
 
+export interface InspirationAsset {
+  id: string;
+  title: string;
+  url: string;
+  thumbnailUrl?: string;
+  notes?: string;
+}
+
+export type GearCompatibilityStatus = 'compatible' | 'missing-gear' | 'adapted';
+
+export interface GearCompatibilityReport {
+  status: GearCompatibilityStatus;
+  notes: string;
+  flaggedItems: string[];
+}
+
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
+export interface AssignmentPlanningData {
+  inspirationAssets: InspirationAsset[];
+  freeFormNotes: string;
+  gearCompatibility: GearCompatibilityReport;
+  checklist: ChecklistItem[];
+}
+
+export interface AssignmentReflectionData {
+  whatWorkedWell: string;
+  technicalAdjustments: string;
+  submissionUrl: string;
+  completedAt?: string;
+}
+
+export interface AssignmentSubmission {
+  assignmentId: string;
+  status: AssignmentStatus;
+  planning: AssignmentPlanningData;
+  reflection: AssignmentReflectionData;
+  updatedAt: string;
+}
+
 export interface Assignment {
   id: string;
   medium: MediumTrack;
@@ -22,6 +66,8 @@ export interface Assignment {
   prerequisites: string[];
   status: AssignmentStatus;
   estimatedMinutes?: number;
+  planning?: AssignmentPlanningData;
+  reflection?: AssignmentReflectionData;
 }
 
 export interface GearProfile {
