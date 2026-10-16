@@ -30,6 +30,8 @@ export interface GearProfile {
   cameras: string[];
   lenses: string[];
   lighting: string[];
+  audio?: string[];
+  supportAndMotion?: string[];
   accessories?: string[];
   editingSetup: {
     hardware: string;

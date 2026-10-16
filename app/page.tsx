@@ -1,8 +1,18 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Assignment, Environment, MediumTrack, AssignmentScale, AssignmentStatus } from "@/lib/types";
-import { CURRICULUM_UNITS, INITIAL_ASSIGNMENTS, DEFAULT_GEAR_PROFILE } from "@/lib/curriculum";
+import {
+  Assignment,
+  Environment,
+  MediumTrack,
+  AssignmentScale,
+  AssignmentStatus,
+} from "@/lib/types";
+import {
+  CURRICULUM_UNITS,
+  INITIAL_ASSIGNMENTS,
+  DEFAULT_GEAR_PROFILE,
+} from "@/lib/curriculum";
 
 export default function Home() {
   const [currentMedium, setCurrentMedium] = useState<MediumTrack>("photography");
@@ -15,7 +25,10 @@ export default function Home() {
 
   // Active unit metadata
   const activeUnit = useMemo(() => {
-    return CURRICULUM_UNITS.find((u) => u.unitNumber === activeUnitNumber) || CURRICULUM_UNITS[0];
+    return (
+      CURRICULUM_UNITS.find((u) => u.unitNumber === activeUnitNumber) ||
+      CURRICULUM_UNITS[0]
+    );
   }, [activeUnitNumber]);
 
   // Filtered assignments based on medium, environment, unit, and scale
@@ -24,7 +37,8 @@ export default function Home() {
       const matchMedium = a.medium === currentMedium;
       const matchEnv = a.environment === currentEnv;
       const matchUnit = a.unitNumber === activeUnitNumber;
-      const matchScale = selectedScale === "all" ? true : a.scale === selectedScale;
+      const matchScale =
+        selectedScale === "all" ? true : a.scale === selectedScale;
       return matchMedium && matchEnv && matchUnit && matchScale;
     });
   }, [assignments, currentMedium, currentEnv, activeUnitNumber, selectedScale]);
@@ -32,8 +46,12 @@ export default function Home() {
   // Overall stats for active context
   const stats = useMemo(() => {
     const totalInContext = contextAssignments.length;
-    const completed = contextAssignments.filter((a) => a.status === "completed").length;
-    const inProgress = contextAssignments.filter((a) => a.status === "in-progress").length;
+    const completed = contextAssignments.filter(
+      (a) => a.status === "completed"
+    ).length;
+    const inProgress = contextAssignments.filter(
+      (a) => a.status === "in-progress"
+    ).length;
     return { totalInContext, completed, inProgress };
   }, [contextAssignments]);
 
@@ -136,7 +154,7 @@ export default function Home() {
                   Strags Studio
                 </span>
                 <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">
-                  Challenge Engine
+                  Engine v2.0
                 </span>
               </div>
               <span className="block text-xs text-zinc-400 font-mono">
@@ -206,10 +224,10 @@ export default function Home() {
             {/* Gear Profile Trigger */}
             <button
               onClick={() => setShowGearSheet(true)}
-              className="px-3 py-1.5 rounded-xl border border-zinc-800 bg-zinc-900/80 hover:bg-zinc-850 hover:border-zinc-700 text-xs text-zinc-300 flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-3 py-1.5 rounded-xl border border-zinc-850 bg-zinc-900/90 hover:bg-zinc-850 hover:border-zinc-700 text-xs text-zinc-300 flex items-center gap-1.5 transition-all cursor-pointer"
             >
               <span>🎒</span>
-              <span>Gear Kit</span>
+              <span>Gear Arsenal</span>
             </button>
           </div>
         </div>
@@ -256,8 +274,8 @@ export default function Home() {
                   <span>{currentEnv === "road" ? "✈️" : "🏠"}</span>
                   <span>
                     {currentEnv === "road"
-                      ? "On the Road (Mobile / Laptop / Writing)"
-                      : "At Home (Full Studio / Rigging / Gear)"}
+                      ? "On the Road (Dell XPS 16 OLED • Fuji X100VI • AE-1 Film • DJI Mic 3)"
+                      : "At Home Studio (Mac Studio M4 Max • ProArt OLED • Hasselblad X2D • Canon R5 II • FS-300B • RS 5)"}
                   </span>
                 </span>
               </div>
@@ -274,12 +292,12 @@ export default function Home() {
             {/* Context Match Card */}
             <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-4 flex flex-col gap-2 min-w-[240px]">
               <div className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
-                Track Progression
+                Unit {activeUnit.unitNumber} Progress
               </div>
               <div className="text-2xl font-bold text-white flex items-baseline gap-2">
                 <span>{contextAssignments.length}</span>
                 <span className="text-xs font-normal text-zinc-400">
-                  {currentMedium} exercises calibrated for this context
+                  challenges for {currentMedium} ({currentEnv})
                 </span>
               </div>
               <div className="flex items-center gap-2 pt-1 border-t border-zinc-800 text-xs text-zinc-400">
@@ -292,7 +310,7 @@ export default function Home() {
 
           {/* Unit Tabs & Scale Controls */}
           <div className="mt-6 pt-6 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-mono text-zinc-500 uppercase mr-1">Curriculum:</span>
               {CURRICULUM_UNITS.map((unit) => {
                 const isActive = unit.unitNumber === activeUnitNumber;
@@ -302,11 +320,11 @@ export default function Home() {
                     onClick={() => setActiveUnitNumber(unit.unitNumber)}
                     className={`px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
                       isActive
-                        ? "bg-zinc-100 text-zinc-900 font-semibold shadow"
+                        ? "bg-zinc-100 text-zinc-900 font-semibold shadow-md"
                         : "bg-zinc-850/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 border border-zinc-800"
                     }`}
                   >
-                    Unit {unit.unitNumber}: {unit.title}
+                    U{unit.unitNumber}: {unit.title}
                   </button>
                 );
               })}
@@ -358,7 +376,7 @@ export default function Home() {
               </span>
             </h2>
             <p className="text-xs text-zinc-400 mt-0.5">
-              Curated for{" "}
+              Calibrated for{" "}
               <span className="font-semibold text-zinc-300">
                 {currentEnv === "road" ? "✈️ On the Road" : "🏠 At Home Studio"}
               </span>{" "}
@@ -371,7 +389,7 @@ export default function Home() {
           </div>
 
           <div className="hidden sm:flex items-center gap-2 text-xs text-zinc-500 font-mono">
-            <span>Select a card to open detailed rubric</span>
+            <span>Select a card to inspect rubric</span>
           </div>
         </div>
 
@@ -478,7 +496,7 @@ export default function Home() {
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-12 text-center flex flex-col items-center gap-3">
             <span className="text-3xl">🎯</span>
             <h3 className="text-base font-semibold text-zinc-200">
-              No matching {currentMedium} challenges found
+              No matching {currentMedium} challenges found in this context
             </h3>
             <p className="text-xs text-zinc-400 max-w-sm">
               Try switching your scale filter to &ldquo;All Scales&rdquo; or change the environment to view
@@ -576,14 +594,14 @@ export default function Home() {
           </div>
         )}
 
-        {/* Gear Profile Modal */}
+        {/* Gear Arsenal Modal */}
         {showGearSheet && (
           <div
             className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6"
             onClick={() => setShowGearSheet(false)}
           >
             <div
-              className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-2xl w-full p-6 sm:p-8 flex flex-col gap-6 shadow-2xl overflow-y-auto max-h-[90vh]"
+              className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-3xl w-full p-6 sm:p-8 flex flex-col gap-6 shadow-2xl overflow-y-auto max-h-[90vh]"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-start justify-between gap-4">
@@ -592,7 +610,7 @@ export default function Home() {
                     🎒 {DEFAULT_GEAR_PROFILE.name}
                   </h2>
                   <p className="text-xs text-zinc-400 mt-1">
-                    Environment-aware gear configurations synced with current assignments.
+                    Environment-aware master gear setup mapped directly to curriculum challenges.
                   </p>
                 </div>
                 <button
@@ -603,6 +621,7 @@ export default function Home() {
                 </button>
               </div>
 
+              {/* Environment Kits */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Road Kit */}
                 <div
@@ -614,11 +633,11 @@ export default function Home() {
                 >
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
-                      <span>✈️ Road Kit</span>
+                      <span>✈️ Road Travel Kit</span>
                     </h3>
                     {currentEnv === "road" && (
                       <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-sky-500/20 text-sky-400">
-                        Current
+                        Current Context
                       </span>
                     )}
                   </div>
@@ -642,11 +661,11 @@ export default function Home() {
                 >
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
-                      <span>🏠 Studio Kit</span>
+                      <span>🏠 Home Studio Kit</span>
                     </h3>
                     {currentEnv === "home" && (
                       <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400">
-                        Current
+                        Current Context
                       </span>
                     )}
                   </div>
@@ -661,23 +680,83 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Cameras & Glass Overview */}
+              {/* Cameras & Lenses Overview */}
               <div className="p-4 rounded-2xl bg-zinc-950/80 border border-zinc-800 flex flex-col gap-3">
                 <h4 className="text-xs font-mono text-zinc-400 uppercase tracking-wider">
-                  Master Sensor & Glass Roster
+                  Sensors & Glass Roster
                 </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                   <div>
-                    <span className="text-zinc-500 block mb-1">Cameras:</span>
-                    <div className="text-zinc-200 font-medium">
-                      {DEFAULT_GEAR_PROFILE.cameras.join(", ")}
-                    </div>
+                    <span className="text-zinc-500 block mb-1.5 font-semibold">Cameras:</span>
+                    <ul className="space-y-1 text-zinc-200">
+                      {DEFAULT_GEAR_PROFILE.cameras.map((c, i) => (
+                        <li key={i}>&bull; {c}</li>
+                      ))}
+                    </ul>
                   </div>
                   <div>
-                    <span className="text-zinc-500 block mb-1">Lenses:</span>
-                    <div className="text-zinc-200 font-medium">
-                      {DEFAULT_GEAR_PROFILE.lenses.join(", ")}
-                    </div>
+                    <span className="text-zinc-500 block mb-1.5 font-semibold">Lenses:</span>
+                    <ul className="space-y-1 text-zinc-200">
+                      {DEFAULT_GEAR_PROFILE.lenses.map((l, i) => (
+                        <li key={i}>&bull; {l}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Audio & Motion Gear */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Audio */}
+                {DEFAULT_GEAR_PROFILE.audio && (
+                  <div className="p-4 rounded-2xl bg-zinc-950/80 border border-zinc-800 flex flex-col gap-2 text-xs">
+                    <h4 className="text-xs font-mono text-zinc-400 uppercase tracking-wider">
+                      🎙 Audio Capture System
+                    </h4>
+                    <ul className="space-y-1 text-zinc-300">
+                      {DEFAULT_GEAR_PROFILE.audio.map((a, i) => (
+                        <li key={i}>&bull; {a}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Support & Motion */}
+                {DEFAULT_GEAR_PROFILE.supportAndMotion && (
+                  <div className="p-4 rounded-2xl bg-zinc-950/80 border border-zinc-800 flex flex-col gap-2 text-xs">
+                    <h4 className="text-xs font-mono text-zinc-400 uppercase tracking-wider">
+                      🎬 Support & Motion Rigging
+                    </h4>
+                    <ul className="space-y-1 text-zinc-300">
+                      {DEFAULT_GEAR_PROFILE.supportAndMotion.map((s, i) => (
+                        <li key={i}>&bull; {s}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              {/* Lighting & Computing Setup */}
+              <div className="p-4 rounded-2xl bg-zinc-950/80 border border-zinc-800 flex flex-col gap-3 text-xs">
+                <h4 className="text-xs font-mono text-zinc-400 uppercase tracking-wider">
+                  Lighting, Grip & Post Hardware
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-zinc-300">
+                  <div>
+                    <span className="text-zinc-500 block mb-1 font-semibold">Lighting & Grip:</span>
+                    <ul className="space-y-1">
+                      {DEFAULT_GEAR_PROFILE.lighting.map((lg, i) => (
+                        <li key={i}>&bull; {lg}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500 block mb-1 font-semibold">Post Hardware & Displays:</span>
+                    <p className="mb-1">&bull; {DEFAULT_GEAR_PROFILE.editingSetup.hardware}</p>
+                    <p className="mb-1">&bull; {DEFAULT_GEAR_PROFILE.editingSetup.monitors}</p>
+                    <p className="text-zinc-400">
+                      &bull; Software: {DEFAULT_GEAR_PROFILE.editingSetup.software.join(", ")}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -685,7 +764,7 @@ export default function Home() {
               <div className="flex justify-end">
                 <button
                   onClick={() => setShowGearSheet(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-zinc-800 hover:bg-zinc-750 text-white transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-white transition-colors cursor-pointer"
                 >
                   Done
                 </button>
