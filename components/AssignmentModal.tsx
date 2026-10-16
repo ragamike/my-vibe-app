@@ -27,6 +27,7 @@ interface AssignmentModalProps {
     planning: AssignmentPlanningData,
     reflection: AssignmentReflectionData
   ) => void;
+  onRefreshAssignment?: (updatedAssignment: Assignment) => void;
 }
 
 const DEFAULT_CHECKLIST: ChecklistItem[] = [
@@ -43,20 +44,16 @@ function getThumbnailForUrl(url: string, explicitThumb?: string): string {
     return explicitThumb;
   }
   const cleanUrl = url.trim().toLowerCase();
-  // Direct image URLs
   if (cleanUrl.match(/\.(jpeg|jpg|gif|png|webp|svg)($|\?)/)) {
     return url;
   }
-  // YouTube thumbnail
   const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/);
   if (ytMatch && ytMatch[1]) {
     return `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
   }
-  // Unsplash image URL
   if (cleanUrl.includes("unsplash.com/photos/")) {
     return "https://images.unsplash.com/photo-1542038784456-1ea8e935640e?auto=format&fit=crop&w=600&q=80";
   }
-  // Generic high-quality visual placeholder based on topic
   return "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=600&q=80";
 }
 
@@ -66,8 +63,14 @@ export default function AssignmentModal({
   onClose,
   onSaveDraft,
   onMarkCompleted,
+  onRefreshAssignment,
 }: AssignmentModalProps) {
   const [activeTab, setActiveTab] = useState<"planning" | "reflection">("planning");
+
+  // Local assignment copy for in-place AI refresh
+  const [currentAssignment, setCurrentAssignment] = useState<Assignment | null>(assignment);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
 
   // Planning state
   const [inspirationAssets, setInspirationAssets] = useState<InspirationAsset[]>([]);
@@ -101,6 +104,7 @@ export default function AssignmentModal({
   useEffect(() => {
     if (!assignment || !isOpen) return;
 
+    setCurrentAssignment(assignment);
     const storageKey = `assignment_data_${assignment.id}`;
     let loadedPlanning: AssignmentPlanningData = {
       inspirationAssets: [],
@@ -131,8 +135,19 @@ export default function AssignmentModal({
         if (parsed.reflection?.completedAt) {
           setCompletedAt(parsed.reflection.completedAt);
         }
+        if (parsed.refreshedTitle) {
+          setCurrentAssignment((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  title: parsed.refreshedTitle,
+                  promptMarkdown: parsed.refreshedPrompt || prev.promptMarkdown,
+                  requiredGear: parsed.refreshedGear || prev.requiredGear,
+                }
+              : null
+          );
+        }
       } else {
-        // Fallback to sample inspiration if empty
         if (assignment.planning?.inspirationAssets?.length) {
           loadedPlanning.inspirationAssets = assignment.planning.inspirationAssets;
         } else {
@@ -175,6 +190,7 @@ export default function AssignmentModal({
     setSubmissionUrl(loadedReflection.submissionUrl || "");
     setStatus(loadedStatus);
     setActiveTab("planning");
+    setRefreshMessage(null);
 
     const snapshot = JSON.stringify({
       planning: loadedPlanning,
@@ -217,37 +233,92 @@ export default function AssignmentModal({
 
   // Save to localStorage helper
   const persistToStorage = useCallback(
-    (targetStatus?: AssignmentStatus) => {
-      if (!assignment) return;
+    (targetStatus?: AssignmentStatus, customAssignment?: Assignment) => {
+      const activeObj = customAssignment || currentAssignment;
+      if (!activeObj) return;
       const finalStatus = targetStatus || (status === "available" && isDirty ? "in-progress" : status);
       const dataToSave = {
-        assignmentId: assignment.id,
+        assignmentId: activeObj.id,
         status: finalStatus,
         planning: currentPlanning,
         reflection: currentReflection,
+        refreshedTitle: activeObj.title,
+        refreshedPrompt: activeObj.promptMarkdown,
+        refreshedGear: activeObj.requiredGear,
         updatedAt: new Date().toISOString(),
       };
       try {
-        localStorage.setItem(`assignment_data_${assignment.id}`, JSON.stringify(dataToSave));
+        localStorage.setItem(`assignment_data_${activeObj.id}`, JSON.stringify(dataToSave));
         setLastAutoSavedTime(new Date().toLocaleTimeString());
       } catch (err) {
         console.error("Failed to save draft to localStorage:", err);
       }
       return finalStatus;
     },
-    [assignment, currentPlanning, currentReflection, status, isDirty]
+    [currentAssignment, currentPlanning, currentReflection, status, isDirty]
   );
 
-  // Auto-save debounced or on blur
+  // Auto-save debounced
   useEffect(() => {
-    if (!assignment || !isOpen || !isDirty) return;
+    if (!currentAssignment || !isOpen || !isDirty) return;
     const timer = setTimeout(() => {
       persistToStorage();
     }, 2000);
     return () => clearTimeout(timer);
-  }, [assignment, isOpen, isDirty, persistToStorage]);
+  }, [currentAssignment, isOpen, isDirty, persistToStorage]);
 
-  if (!isOpen || !assignment) return null;
+  // On-demand AI Refresh Task Handler
+  const handleRefreshTask = async () => {
+    if (!currentAssignment || isRefreshing) return;
+    setIsRefreshing(true);
+    setRefreshMessage("Calling Gemini 2.5 Flash for updated challenge rubric...");
+
+    try {
+      const res = await fetch("/api/generate-challenge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          medium: currentAssignment.medium,
+          environment: currentAssignment.environment,
+          unitNumber: currentAssignment.unitNumber,
+          difficultyTier: currentAssignment.difficultyTier,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success && data.assignment) {
+        const fresh: Assignment = {
+          ...currentAssignment,
+          title: data.assignment.title,
+          promptMarkdown: data.assignment.promptMarkdown,
+          requiredGear: data.assignment.requiredGear || currentAssignment.requiredGear,
+          domain: data.assignment.domain || currentAssignment.domain,
+          estimatedMinutes: data.assignment.estimatedMinutes || currentAssignment.estimatedMinutes,
+        };
+
+        setCurrentAssignment(fresh);
+        persistToStorage(status, fresh);
+
+        if (onRefreshAssignment) {
+          onRefreshAssignment(fresh);
+        }
+
+        setRefreshMessage(
+          `Refreshed with ${data.source === "gemini-2.5-flash" ? "Gemini 2.5 Flash" : "Dynamic Engine"}`
+        );
+        setTimeout(() => setRefreshMessage(null), 4000);
+      } else {
+        setRefreshMessage("Failed to regenerate task. Please try again.");
+      }
+    } catch (err) {
+      console.error("Task refresh failed:", err);
+      setRefreshMessage("Network error during challenge refresh.");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  if (!isOpen || !currentAssignment) return null;
 
   // Handlers for Inspiration Assets
   const handleAddInspiration = () => {
@@ -314,7 +385,7 @@ export default function AssignmentModal({
   // Save Draft & Close
   const handleSaveDraftAndClose = () => {
     const updatedStatus = persistToStorage();
-    onSaveDraft(assignment.id, currentPlanning, currentReflection, updatedStatus || status);
+    onSaveDraft(currentAssignment.id, currentPlanning, currentReflection, updatedStatus || status);
     onClose();
   };
 
@@ -338,7 +409,7 @@ export default function AssignmentModal({
     setCompletedAt(now);
     setStatus("completed");
     persistToStorage("completed");
-    onMarkCompleted(assignment.id, currentPlanning, { ...currentReflection, completedAt: now });
+    onMarkCompleted(currentAssignment.id, currentPlanning, { ...currentReflection, completedAt: now });
   };
 
   const completedChecklistCount = checklist.filter((c) => c.completed).length;
@@ -352,19 +423,19 @@ export default function AssignmentModal({
         {/* Modal Top Header */}
         <div className="p-5 sm:p-6 border-b border-zinc-800 bg-zinc-950/60 flex flex-col gap-3">
           <div className="flex items-start justify-between gap-4">
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
-                  Unit {assignment.unitNumber}
+                  Unit {currentAssignment.unitNumber}
                 </span>
                 <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                  Tier {assignment.difficultyTier}
+                  Tier {currentAssignment.difficultyTier}
                 </span>
                 <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-750">
-                  {assignment.medium === "photography" ? "📸 Photography" : "🎬 Videography"}
+                  {currentAssignment.medium === "photography" ? "📸 Photography" : "🎬 Videography"}
                 </span>
                 <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-zinc-800 text-zinc-400">
-                  {assignment.environment === "road" ? "✈️ Road" : "🏠 Home Studio"}
+                  {currentAssignment.environment === "road" ? "✈️ Road" : "🏠 Home Studio"}
                 </span>
                 {status === "completed" ? (
                   <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
@@ -383,18 +454,40 @@ export default function AssignmentModal({
               </div>
 
               <h2 className="text-lg sm:text-2xl font-bold text-white tracking-tight leading-snug">
-                {assignment.title}
+                {currentAssignment.title}
               </h2>
             </div>
 
-            <button
-              onClick={handleCancelClick}
-              className="w-8 h-8 rounded-full bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition-colors shrink-0 cursor-pointer"
-              title="Close or Cancel"
-            >
-              ✕
-            </button>
+            {/* Top Action Buttons (Refresh & Close) */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleRefreshTask}
+                disabled={isRefreshing}
+                className="px-3 py-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                title="Regenerate task using Gemini 2.5 Flash"
+              >
+                <span className={isRefreshing ? "animate-spin" : ""}>🔄</span>
+                <span>{isRefreshing ? "Generating..." : "Refresh Task"}</span>
+              </button>
+
+              <button
+                onClick={handleCancelClick}
+                className="w-8 h-8 rounded-full bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition-colors shrink-0 cursor-pointer"
+                title="Close or Cancel"
+              >
+                ✕
+              </button>
+            </div>
           </div>
+
+          {/* AI Refresh Feedback Banner */}
+          {refreshMessage && (
+            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-2 animate-fade-in">
+              <span>✨</span>
+              <span>{refreshMessage}</span>
+            </div>
+          )}
 
           {/* Section Segmented Switcher */}
           <div className="flex items-center justify-between pt-2">
@@ -445,13 +538,23 @@ export default function AssignmentModal({
           {/* ========================================================================= */}
           {activeTab === "planning" && (
             <div className="space-y-6">
-              {/* Challenge Brief Accordion / Overview */}
+              {/* Challenge Brief Overview with on-demand refresh */}
               <div className="p-4 rounded-2xl bg-zinc-950/80 border border-zinc-800 flex flex-col gap-2">
-                <span className="text-xs font-mono uppercase tracking-wider text-amber-400 font-semibold flex items-center gap-1.5">
-                  <span>📋</span> Assignment Rubric & Protocol:
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono uppercase tracking-wider text-amber-400 font-semibold flex items-center gap-1.5">
+                    <span>📋</span> Assignment Rubric & Protocol:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleRefreshTask}
+                    disabled={isRefreshing}
+                    className="text-[11px] text-zinc-400 hover:text-amber-300 font-mono flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <span>🔄 Refresh Rubric</span>
+                  </button>
+                </div>
                 <div className="text-xs sm:text-sm text-zinc-300 leading-relaxed font-sans whitespace-pre-line pl-1 border-l-2 border-amber-500/40">
-                  {assignment.promptMarkdown}
+                  {currentAssignment.promptMarkdown}
                 </div>
               </div>
 
@@ -539,7 +642,6 @@ export default function AssignmentModal({
                         key={asset.id}
                         className="group relative rounded-xl border border-zinc-800 bg-zinc-950/70 overflow-hidden flex flex-col hover:border-zinc-700 transition-all shadow-sm"
                       >
-                        {/* Thumbnail Image Header */}
                         <div className="relative h-28 w-full bg-zinc-900 overflow-hidden">
                           {asset.thumbnailUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
@@ -548,7 +650,6 @@ export default function AssignmentModal({
                               alt={asset.title}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                               onError={(e) => {
-                                // Fallback on broken image
                                 (e.target as HTMLImageElement).src =
                                   "https://images.unsplash.com/photo-1542038784456-1ea8e935640e?auto=format&fit=crop&w=600&q=80";
                               }}
@@ -568,7 +669,6 @@ export default function AssignmentModal({
                           </button>
                         </div>
 
-                        {/* Caption & Link */}
                         <div className="p-2.5 flex flex-col justify-between flex-1 gap-1.5">
                           <span className="text-xs font-semibold text-zinc-200 line-clamp-1">
                             {asset.title}
@@ -622,7 +722,6 @@ export default function AssignmentModal({
                     </p>
                   </div>
 
-                  {/* Compatibility Status Selector */}
                   <select
                     value={gearReport.status}
                     onChange={(e) =>
@@ -639,13 +738,12 @@ export default function AssignmentModal({
                   </select>
                 </div>
 
-                {/* Required Gear Check / Flagging Chips */}
                 <div className="pt-1">
                   <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block mb-1.5">
                     Click items to flag missing or substituted equipment:
                   </span>
                   <div className="flex flex-wrap gap-2">
-                    {assignment.requiredGear.map((gear, idx) => {
+                    {currentAssignment.requiredGear.map((gear, idx) => {
                       const isFlagged = gearReport.flaggedItems.includes(gear);
                       return (
                         <button
@@ -666,7 +764,6 @@ export default function AssignmentModal({
                   </div>
                 </div>
 
-                {/* Compatibility Notes / Adaptation Report */}
                 <div>
                   <label className="block text-xs text-zinc-400 mb-1">
                     Gear Notes & Adaptation Report (Optional):
@@ -711,7 +808,7 @@ export default function AssignmentModal({
                         <input
                           type="checkbox"
                           checked={item.completed}
-                          onChange={() => {}} // handled by div click
+                          onChange={() => {}}
                           className="w-4 h-4 rounded border-zinc-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer"
                         />
                         <span
@@ -737,7 +834,6 @@ export default function AssignmentModal({
                   ))}
                 </div>
 
-                {/* Add Custom Checklist Item */}
                 <div className="flex items-center gap-2 pt-1">
                   <input
                     type="text"
@@ -764,7 +860,6 @@ export default function AssignmentModal({
           {/* ========================================================================= */}
           {activeTab === "reflection" && (
             <div className="space-y-6">
-              {/* Status Banner */}
               <div
                 className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                   status === "completed"
@@ -809,7 +904,6 @@ export default function AssignmentModal({
                 )}
               </div>
 
-              {/* Input 1: What Worked Well */}
               <div className="space-y-2">
                 <label className="text-sm font-bold text-white flex items-center gap-2">
                   <span>✨</span> What Worked Well (Creative Breakthroughs & Successes)
@@ -823,7 +917,6 @@ export default function AssignmentModal({
                 />
               </div>
 
-              {/* Input 2: Technical Adjustments */}
               <div className="space-y-2">
                 <label className="text-sm font-bold text-white flex items-center gap-2">
                   <span>🔧</span> Technical Adjustments & What Didn&apos;t Go as Planned
@@ -837,7 +930,6 @@ export default function AssignmentModal({
                 />
               </div>
 
-              {/* Input 3: Final Submission Link */}
               <div className="space-y-2 p-4 rounded-2xl bg-zinc-950 border border-zinc-800">
                 <label className="text-sm font-bold text-white flex items-center gap-2">
                   <span>🔗</span> Final Submission Asset Link (Video / Stills / Portfolio)

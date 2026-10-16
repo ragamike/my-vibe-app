@@ -25,25 +25,41 @@ export default function Home() {
   const [assignments, setAssignments] = useState<Assignment[]>(INITIAL_ASSIGNMENTS);
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   const [showGearSheet, setShowGearSheet] = useState<boolean>(false);
+  const [isGeneratingChallenge, setIsGeneratingChallenge] = useState<boolean>(false);
+  const [generationFeedback, setGenerationFeedback] = useState<string | null>(null);
 
   // Sync with localStorage on client mount to restore saved drafts and completions
   useEffect(() => {
     try {
-      setAssignments((prev) =>
-        prev.map((item) => {
-          const stored = localStorage.getItem(`assignment_data_${item.id}`);
-          if (stored) {
-            const parsed = JSON.parse(stored);
-            return {
-              ...item,
-              status: parsed.status || item.status,
-              planning: parsed.planning || item.planning,
-              reflection: parsed.reflection || item.reflection,
-            };
-          }
-          return item;
-        })
-      );
+      // 1. Check for dynamic generated challenges
+      const storedDynamic = localStorage.getItem("cached_dynamic_assignments");
+      let allAssignments = [...INITIAL_ASSIGNMENTS];
+      if (storedDynamic) {
+        const parsedDynamic: Assignment[] = JSON.parse(storedDynamic);
+        const existingIds = new Set(allAssignments.map((a) => a.id));
+        const filteredNew = parsedDynamic.filter((a) => !existingIds.has(a.id));
+        allAssignments = [...filteredNew, ...allAssignments];
+      }
+
+      // 2. Check for individual task progress & edits
+      const updated = allAssignments.map((item) => {
+        const stored = localStorage.getItem(`assignment_data_${item.id}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          return {
+            ...item,
+            title: parsed.refreshedTitle || item.title,
+            promptMarkdown: parsed.refreshedPrompt || item.promptMarkdown,
+            requiredGear: parsed.refreshedGear || item.requiredGear,
+            status: parsed.status || item.status,
+            planning: parsed.planning || item.planning,
+            reflection: parsed.reflection || item.reflection,
+          };
+        }
+        return item;
+      });
+
+      setAssignments(updated);
     } catch (e) {
       console.warn("Could not load stored assignment progress:", e);
     }
@@ -146,6 +162,76 @@ export default function Home() {
     setSelectedAssignment(null);
   };
 
+  const handleRefreshAssignmentInList = (refreshed: Assignment) => {
+    setAssignments((prev) =>
+      prev.map((item) => (item.id === refreshed.id ? refreshed : item))
+    );
+  };
+
+  // On-demand AI Challenge Generator via API
+  const handleOnDemandGenerateChallenge = async () => {
+    if (isGeneratingChallenge) return;
+    setIsGeneratingChallenge(true);
+    setGenerationFeedback("Synthesizing context challenge with Gemini 2.5 Flash...");
+
+    try {
+      const res = await fetch("/api/generate-challenge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          medium: currentMedium,
+          environment: currentEnv,
+          unitNumber: activeUnitNumber,
+          difficultyTier: 2,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success && data.assignment) {
+        const newChallenge: Assignment = data.assignment;
+
+        // Prepend to assignments list
+        setAssignments((prev) => [newChallenge, ...prev]);
+
+        // Cache in localStorage
+        try {
+          const storedDynamic = localStorage.getItem("cached_dynamic_assignments");
+          const existingDynamic = storedDynamic ? JSON.parse(storedDynamic) : [];
+          localStorage.setItem(
+            "cached_dynamic_assignments",
+            JSON.stringify([newChallenge, ...existingDynamic])
+          );
+          localStorage.setItem(
+            `assignment_data_${newChallenge.id}`,
+            JSON.stringify({
+              assignmentId: newChallenge.id,
+              status: "available",
+              refreshedTitle: newChallenge.title,
+              refreshedPrompt: newChallenge.promptMarkdown,
+              refreshedGear: newChallenge.requiredGear,
+              updatedAt: new Date().toISOString(),
+            })
+          );
+        } catch (storageErr) {
+          console.warn("Could not cache dynamic challenge:", storageErr);
+        }
+
+        setSelectedAssignment(newChallenge);
+        setGenerationFeedback(
+          `Generated: "${newChallenge.title}" via ${data.source === "gemini-2.5-flash" ? "Gemini 2.5 Flash" : "Context Engine"}`
+        );
+        setTimeout(() => setGenerationFeedback(null), 5000);
+      } else {
+        setGenerationFeedback("Failed to generate challenge. Please try again.");
+      }
+    } catch (err) {
+      console.error("Error generating challenge:", err);
+      setGenerationFeedback("Network error generating challenge.");
+    } finally {
+      setIsGeneratingChallenge(false);
+    }
+  };
+
   const getStatusBadge = (status: AssignmentStatus) => {
     switch (status) {
       case "completed":
@@ -226,7 +312,7 @@ export default function Home() {
                   Strags Studio
                 </span>
                 <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">
-                  Engine v2.0
+                  Engine v2.5 &bull; Gemini Flash
                 </span>
               </div>
               <span className="block text-xs text-zinc-400 font-mono">
@@ -438,8 +524,8 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Section Heading */}
-        <div className="flex items-center justify-between">
+        {/* Section Heading with on-demand [🔄 Refresh Task] button */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <span className="capitalize">{currentMedium}</span> Challenges Matching Context
@@ -460,10 +546,38 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="hidden sm:flex items-center gap-2 text-xs text-zinc-500 font-mono">
-            <span>Click any card to open Planning, Pre-Vis & Reflection</span>
+          <div className="flex items-center gap-3">
+            {/* On-Demand AI Refresh Button */}
+            <button
+              onClick={handleOnDemandGenerateChallenge}
+              disabled={isGeneratingChallenge}
+              className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/10 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-300 border border-amber-500/40 shadow-sm transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
+              title="Generate a new challenge using Gemini 2.5 Flash for the active context"
+            >
+              <span className={isGeneratingChallenge ? "animate-spin" : ""}>🔄</span>
+              <span>{isGeneratingChallenge ? "Synthesizing AI Task..." : "Refresh Task"}</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 font-mono">
+                AI
+              </span>
+            </button>
           </div>
         </div>
+
+        {/* Generation Feedback Toast */}
+        {generationFeedback && (
+          <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-center justify-between gap-2 animate-fade-in">
+            <div className="flex items-center gap-2">
+              <span>✨</span>
+              <span>{generationFeedback}</span>
+            </div>
+            <button
+              onClick={() => setGenerationFeedback(null)}
+              className="text-amber-400/80 hover:text-amber-200 text-xs"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Challenge Cards Grid */}
         <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -489,6 +603,11 @@ export default function Home() {
                       <span className="text-xs font-mono text-zinc-400">
                         Tier {assignment.difficultyTier}
                       </span>
+                      {assignment.id.startsWith("gen-") && (
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono">
+                          AI Fresh
+                        </span>
+                      )}
                     </div>
                     {getStatusBadge(assignment.status)}
                   </div>
@@ -571,9 +690,14 @@ export default function Home() {
               No matching {currentMedium} challenges found in this context
             </h3>
             <p className="text-xs text-zinc-400 max-w-sm">
-              Try switching your scale filter to &ldquo;All Scales&rdquo; or change the environment to view
-              other exercises in Unit {activeUnit.unitNumber}.
+              Try switching your scale filter to &ldquo;All Scales&rdquo; or click &ldquo;Refresh Task&rdquo; to synthesize an on-demand AI challenge.
             </p>
+            <button
+              onClick={handleOnDemandGenerateChallenge}
+              className="mt-2 px-4 py-2 rounded-xl text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-zinc-950 transition-colors cursor-pointer"
+            >
+              🔄 Synthesize Challenge with Gemini 2.5 Flash
+            </button>
           </div>
         )}
 
@@ -584,6 +708,7 @@ export default function Home() {
           onClose={() => setSelectedAssignment(null)}
           onSaveDraft={handleSaveDraft}
           onMarkCompleted={handleMarkCompleted}
+          onRefreshAssignment={handleRefreshAssignmentInList}
         />
 
         {/* Gear Arsenal Modal */}
